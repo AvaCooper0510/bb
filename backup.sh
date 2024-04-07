@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-. /backup/.env
+. /data/.env
 
 # tar -czvf /backup/backup_data_$(date +%Y%m%d%H%M%S).tar.gz -C /data .
 
