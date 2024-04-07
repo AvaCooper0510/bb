@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy_server
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - app-network
+    volumes:
+      - ./data/caddy_data:/data
+      - ./data/caddy_config:/config
+      - ./data/caddy_log:/var/log/caddy
+      - ./data/Caddyfile:/etc/caddy/Caddyfile
+    restart: unless-stopped
+  app:
+    container_name: mx-server
+    image: avacooper/core:master
+    command: bash ./docker-run.sh
+    environment:
+      - TZ=US/Eastern
+      - NODE_ENV=production
+      - ALLOWED_ORIGINS
+      - JWT_SECRET
+      - ENCRYPT_KEY
+      - ENCRYPT_ENABLE
+      - FORCE_CACHE_HEADER
+      - CDN_CACHE_HEADER
+
+    volumes:
+      - ./data/mx-space:/root/.mx-space
+    ports:
+      - '2333:2333'
+    depends_on:
+      - mongo
+      - redis
+    links:
+      - mongo
+      - redis
+    networks:
+      - app-network
+    restart: always
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://127.0.0.1:2333/api/v2/ping']
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+
+  mongo:
+    container_name: mongo
+    image: mongo
+    volumes:
+      - ./data/db:/data/db
+    networks:
+      - app-network
+    restart: always
+  redis:
+    image: redis
+    container_name: redis
+
+    networks:
+      - app-network
+    restart: always
+
+  easyimage:
+    image: ddsderek/easyimage:latest
+    container_name: easyimage
+    networks:
+      - app-network
+    ports:
+      - '8080:80'
+    environment:
+      - TZ=US/Eastern
+      - PUID=1000
+      - PGID=1000
+      - DEBUG=false
+    volumes:
+      - './data/easyimage/config:/app/web/config'
+      - './data/easyimage/i:/app/web/i'
+    restart: unless-stopped
+
+  uptime:
+    image: louislam/uptime-kuma:latest
+    container_name: uptime
+    networks:
+      - app-network
+    ports:
+      - '3001:3001'
+    volumes:
+      - './data/uptime/:/app/data'
+    restart: always
+
+  backup:
+    init: true
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+    depends_on:
+      - app
+    volumes:
+      - './data:/data'
+      - './backup:/backup'
+    # command: sh -c "apk add --no-cache mongodb-tools redis && /backup/backup.sh"
+    # command: sh -c "/backup/backup.sh"
+
+networks:
+  app-network:
+    driver: bridge
